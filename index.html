@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>Texture Shuffler</title>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
+</head>
+<body>
+  <button id="shuffleBtn">テクスチャをシャッフルしてZIPを作成</button>
+  <div id="status">状態：準備完了</div>
+
+  <script>
+    const GITHUB_ZIP_URL = 'https://corsproxy.io/?https://github.com/Mojang/bedrock-samples/archive/refs/heads/main.zip';
+
+    document.getElementById('shuffleBtn').addEventListener('click', async () => {
+      const status = document.getElementById('status');
+      try {
+        status.textContent = '状態：GitHub ZIP を取得中…';
+        const resp = await fetch(GITHUB_ZIP_URL);
+        if (!resp.ok) throw new Error('ダウンロード失敗: ' + resp.status);
+        const blob = await resp.blob();
+
+        status.textContent = '状態：ZIP を展開中…';
+        const originalZip = await JSZip.loadAsync(blob);
+
+        // ルートディレクトリ特定（例: bedrock-samples-main）
+        const rootFolder = Object.keys(originalZip.files)[0].split('/')[0];
+        const texBase = rootFolder + '/resource_pack/textures/';
+        const blocksPrefix = texBase + 'blocks/';
+        const itemsPrefix = texBase + 'items/';
+        const manifestPath = rootFolder + '/resource_pack/manifest.json';
+
+        const filteredFiles = Object.entries(originalZip.files).filter(([path, file]) =>
+          path.startsWith(blocksPrefix) || path.startsWith(itemsPrefix)
+        );
+
+        if (filteredFiles.length === 0) throw new Error('blocks または items テクスチャが見つかりません');
+
+        status.textContent = `状態：${filteredFiles.length} 枚の PNG を読み込み中…`;
+        const pngBuffers = await Promise.all(
+          filteredFiles.map(([_, file]) => file.async('uint8array'))
+        );
+
+        // シャッフル
+        const shuffled = pngBuffers.slice();
+        for (let i = shuffled.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+        }
+
+        // 新しいZIPを作成
+        const newZip = new JSZip();
+        for (let i = 0; i < filteredFiles.length; i++) {
+          const [originalPath] = filteredFiles[i];
+          const relativePath = originalPath.replace(rootFolder + '/', '');
+          newZip.file(relativePath, shuffled[i]);
+        }
+
+        // manifest.json をコピー
+        const manifestFile = originalZip.file(manifestPath);
+        if (manifestFile) {
+          const manifestContent = await manifestFile.async('uint8array');
+          newZip.file('resource_pack/manifest.json', manifestContent);
+        } else {
+          console.warn('manifest.json が見つかりませんでした');
+        }
+
+        status.textContent = '状態：ZIP を生成中…';
+        const newBlob = await newZip.generateAsync({ type: 'blob' });
+        saveAs(newBlob, 'shuffled_texturepack.zip');
+
+        status.textContent = '✅ 完了：ZIP をダウンロードしました';
+      } catch (err) {
+        status.textContent = 'エラー：' + err.message;
+        console.error(err);
+      }
+    });
+  </script>
+</body>
+</html>
