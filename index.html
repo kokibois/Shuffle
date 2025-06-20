@@ -24,13 +24,14 @@
         status.textContent = '状態：ZIP を展開中…';
         const originalZip = await JSZip.loadAsync(blob);
 
-        // ルートディレクトリ特定（例: bedrock-samples-main）
+        // ルートフォルダ（例：bedrock-samples-main）
         const rootFolder = Object.keys(originalZip.files)[0].split('/')[0];
         const texBase = rootFolder + '/resource_pack/textures/';
         const blocksPrefix = texBase + 'blocks/';
         const itemsPrefix = texBase + 'items/';
         const manifestPath = rootFolder + '/resource_pack/manifest.json';
 
+        // PNG抽出
         const filteredFiles = Object.entries(originalZip.files).filter(([path, file]) =>
           path.startsWith(blocksPrefix) || path.startsWith(itemsPrefix)
         );
@@ -49,21 +50,23 @@
           [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
         }
 
-        // 新しいZIPを作成
+        // 新しいZIPを構築
         const newZip = new JSZip();
+
+        // PNGファイルを resource_pack/textures/... に追加
         for (let i = 0; i < filteredFiles.length; i++) {
           const [originalPath] = filteredFiles[i];
-          const relativePath = originalPath.replace(rootFolder + '/', '');
+          const relativePath = originalPath.replace(rootFolder + '/resource_pack/', 'resource_pack/');
           newZip.file(relativePath, shuffled[i]);
         }
 
-        // manifest.json をコピー
+        // manifest.json を ZIP のルートに追加
         const manifestFile = originalZip.file(manifestPath);
         if (manifestFile) {
           const manifestContent = await manifestFile.async('uint8array');
-          newZip.file('resource_pack/manifest.json', manifestContent);
+          newZip.file('manifest.json', manifestContent); // ルートに配置
         } else {
-          console.warn('manifest.json が見つかりませんでした');
+          throw new Error('manifest.json が見つかりませんでした');
         }
 
         status.textContent = '状態：ZIP を生成中…';
