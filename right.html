@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Texture Pack Shuffler</title>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+</head>
+<body>
+  <button onclick="shuffleTextures()">シャッフルしてダウンロード</button>
+
+  <script>
+    async function shuffleTextures() {
+      const ZIP_URL = 'https://github.com/Mojang/bedrock-samples/archive/refs/heads/main.zip';
+      const zip = new JSZip();
+
+      console.log("ダウンロード中...");
+      const response = await fetch(ZIP_URL);
+      const blob = await response.blob();
+      const arrayBuffer = await blob.arrayBuffer();
+
+      console.log("ZIPを展開中...");
+      const loadedZip = await JSZip.loadAsync(arrayBuffer);
+      
+      const pngFiles = [];
+      const contentMap = {};
+
+      // resource_pack内のPNGファイルを探す
+      loadedZip.forEach((relativePath, file) => {
+        if (relativePath.includes("resource_pack/") && relativePath.endsWith(".png") && !file.dir) {
+          pngFiles.push(relativePath);
+        }
+      });
+
+      // 中身を読み込んで保存
+      for (const path of pngFiles) {
+        const content = await loadedZip.file(path).async("uint8array");
+        contentMap[path] = content;
+      }
+
+      // 内容だけシャッフル
+      const shuffled = Object.values(contentMap);
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+
+      // 新しいZIPを作成
+      const newZip = new JSZip();
+      let index = 0;
+      for (const path of pngFiles) {
+        newZip.file(path.split('/').slice(1).join('/'), shuffled[index++]);  // 相対パス調整
+      }
+
+      // resource_pack以外もコピー
+      loadedZip.forEach(async (relativePath, file) => {
+        if (!relativePath.includes("resource_pack/")) {
+          if (!file.dir) {
+            const data = await file.async("uint8array");
+            newZip.file(relativePath.split('/').slice(1).join('/'), data);
+          }
+        }
+      });
+
+      console.log("ZIPを生成中...");
+      const finalZip = await newZip.generateAsync({ type: "blob" });
+
+      // ダウンロードリンク生成
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(finalZip);
+      link.download = "shuffled_texturepack.zip";
+      link.click();
+    }
+  </script>
+</body>
+</html>
