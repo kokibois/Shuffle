@@ -71,7 +71,7 @@
 
         status.textContent = '状態：ZIP を生成中…';
         const newBlob = await newZip.generateAsync({ type: 'blob' });
-        saveAs(newBlob, 'shuffled_texturepack.zip');
+        saveAs(newBlob, 'shuffled_texturepack.mcpack');
 
         status.textContent = '✅ 完了：ZIP をダウンロードしました';
       } catch (err) {
