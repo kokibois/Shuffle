@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>Texture Pack Shuffler</title>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
+</head>
+<body>
+  <button id="shuffleBtn">テクスチャをシャッフルしてZIPを作成</button>
+  <div id="status">状態：準備完了</div>
+
+  <script>
+    const GITHUB_ZIP_URL = 'https://github.com/Mojang/bedrock-samples/archive/refs/heads/main.zip';
+
+    document.getElementById('shuffleBtn').addEventListener('click', async () => {
+      const status = document.getElementById('status');
+      try {
+        status.textContent = '状態：GitHub ZIP を取得中…';
+        const resp = await fetch(GITHUB_ZIP_URL);
+        if (!resp.ok) throw new Error('ダウンロード失敗: ' + resp.status);
+        const blob = await resp.blob();
+
+        status.textContent = '状態：ZIP を展開中…';
+        const zip = await JSZip.loadAsync(blob);
+
+        const rootFolder = Object.keys(zip.files)
+          .map(fn => fn.split('/')[0])
+          .find((v,i,a) => a.indexOf(v) === i);
+        const basePath = rootFolder + '/resource_pack/';
+
+        const pngFiles = Object.entries(zip.files)
+          .filter(([path, file]) => path.startsWith(basePath) && path.endsWith('.png'));
+
+        if (pngFiles.length === 0) throw new Error('resource_pack 内に PNG が見つかりません');
+
+        status.textContent = `状態：${pngFiles.length} 枚の PNG をロード中…`;
+        const pngDatas = await Promise.all(pngFiles.map(([_, file]) => file.async('uint8array')));
+
+        // シャッフル
+        const shuffled = pngDatas.slice();
+        for (let i = shuffled.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+        }
+
+        // ZIPへ戻し
+        status.textContent = '状態：シャッフルした PNG を ZIP に書き戻し中…';
+        pngFiles.forEach(([path,_], idx) => {
+          zip.file(path, shuffled[idx]);
+        });
+
+        status.textContent = '状態：ZIP を生成中…';
+        const newZipBlob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
+
+        saveAs(newZipBlob, 'shuffled_texturepack.zip');
+        status.textContent = '状態：完了！「shuffled_texturepack.zip」をダウンロードしました';
+      } catch (err) {
+        status.textContent = 'エラー：' + err.message;
+        console.error(err);
+      }
+    });
+  </script>
+</body>
+</html>
